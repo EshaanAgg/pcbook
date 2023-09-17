@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option go_package = "./../go/pb";
+
+message Memory {
+    // Definning it as a nested type as we only want it to exist within the context of the Memory struct
+    enum Unit {
+        UNKNOWN = 0;
+        BIT = 1;
+        BTYE = 2;
+        KILOBYTE = 3;
+        MEGABYTE = 4;
+        GIGABYTE = 5;
+        TERABYTE = 6;
+    }
+
+    uint64 value = 1;
+    Unit unit = 2;
+}
