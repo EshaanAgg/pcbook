@@ -1,0 +1,9 @@
+{
+	"editor.formatOnSave": true,
+	"clang-format.executable": "/usr/bin/clang-format",
+	"protoc": {
+		"path": "/usr/bin/protoc",
+		// Done so as to ensure that proto extension looks inside the /proto folder for the relative imports
+		"options": ["--proto_path=proto"]
+	}
+}

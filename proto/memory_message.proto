@@ -1,9 +1,10 @@
 syntax = "proto3";
 
+package eshaanagg.pcbook;
 option go_package = "./../go/pb";
 
 message Memory {
-    // Definning it as a nested type as we only want it to exist within the context of the Memory struct
+    // Defining it as a nested type as we only want it to exist within the context of the Memory struct
     enum Unit {
         UNKNOWN = 0;
         BIT = 1;
