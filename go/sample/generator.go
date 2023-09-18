@@ -1,6 +1,9 @@
 package sample
 
-import "github.com/eshaanagg/pcbook/go/pb"
+import (
+	"github.com/eshaanagg/pcbook/go/pb"
+	"github.com/golang/protobuf/ptypes"
+)
 
 func NewKeyboard() *pb.Keyboard {
 	keyboard := &pb.Keyboard{
@@ -105,6 +108,7 @@ func NewLaptop() *pb.Laptop {
 		Weight: &pb.Laptop_WeightKg{
 			WeightKg: randomFloat64(1.0, 3.0),
 		},
+		UpdatedAt: ptypes.TimestampNow(),
 	}
 
 	return laptop
