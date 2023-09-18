@@ -5,5 +5,7 @@
 		"path": "/usr/bin/protoc",
 		// Done so as to ensure that proto extension looks inside the /proto folder for the relative imports
 		"options": ["--proto_path=proto"]
-	}
+	},
+	"java.compile.nullAnalysis.mode": "automatic",
+	"java.configuration.updateBuildConfiguration": "automatic"
 }
