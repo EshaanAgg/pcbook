@@ -4,5 +4,8 @@ gen:
 clean:
 	rm go/pb/*
 
-run: 
-	cd go && go run main.go
+server: 
+	cd go && go run cmd/server/main.go --port 8080
+
+client: 
+	cd go && go run cmd/client/main.go --address 0.0.0.0:8080

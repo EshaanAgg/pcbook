@@ -47,6 +47,16 @@ func (server *LaptopServer) CreateLaptop(ctx context.Context, req *pb.CreateLapt
 		laptop.Id = id.String()
 	}
 
+	// Check for context errors before saving the laptop to the store
+	if ctx.Err() == context.Canceled {
+		log.Print("The request was cancelled")
+		return nil, status.Error(codes.Canceled, "The request was cancelled")
+	}
+	if ctx.Err() == context.DeadlineExceeded {
+		log.Print("Deadline for the request exceeded")
+		return nil, status.Error(codes.DeadlineExceeded, "Deadline exceeded")
+	}
+
 	err := server.Store.Save(laptop)
 	if err != nil {
 		// Figure out the appropiate error code
