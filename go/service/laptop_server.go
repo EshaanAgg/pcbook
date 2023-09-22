@@ -15,6 +15,8 @@ import (
 type LaptopServer struct {
 	// Use a in-memory store instead of a database connection
 	Store LaptopStore
+	// Embedded to have forward compatibility
+	pb.UnimplementedLaptopServiceServer
 }
 
 // Returns a new LaptopServer
@@ -24,7 +26,7 @@ func NewLaptopServer(store LaptopStore) *LaptopServer {
 	}
 }
 
-// The server must implement the CreateLaptop function (rpc) as defined in the laptop service (proto)
+// The server must implement the LaptopServiceServer interface
 // It is a unary RPC to create a new laptop
 func (server *LaptopServer) CreateLaptop(ctx context.Context, req *pb.CreateLaptopRequest) (*pb.CreateLaptopResponse, error) {
 	laptop := req.GetLaptop()
