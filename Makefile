@@ -9,3 +9,6 @@ server:
 
 client: 
 	cd go && go run cmd/client/main.go --address 0.0.0.0:8080
+
+test:
+	cd go && go test ./...
