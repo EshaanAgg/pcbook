@@ -24,7 +24,7 @@ message Laptop {
         double weight_kg = 10;
         double weight_lb = 11;
     }
-    double price_uuid = 12;
+    double price_usd = 12;
     double release_year = 13;
     google.protobuf.Timestamp updated_at = 14;
 }

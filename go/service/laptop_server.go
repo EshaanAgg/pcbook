@@ -73,3 +73,31 @@ func (server *LaptopServer) CreateLaptop(ctx context.Context, req *pb.CreateLapt
 		Id: laptop.Id,
 	}, nil
 }
+
+func (server *LaptopServer) SearchLaptop(req *pb.SearchLaptopRequest, stream pb.LaptopService_SearchLaptopServer) error {
+	filter := req.GetFilter()
+	log.Printf("Recieved a SearchLaptop request with filter: %v", filter)
+
+	err := server.Store.Search(
+		filter,
+		func(laptop *pb.Laptop) error {
+			res := &pb.SearchLaptopResponse{
+				Laptop: laptop,
+			}
+
+			err := stream.Send(res)
+			if err != nil {
+				return err
+			}
+
+			log.Printf("Sent laptop with id: %v", laptop.Id)
+			return nil
+		},
+	)
+
+	if err != nil {
+		return status.Errorf(codes.Internal, "unexpected error: %v", err)
+	}
+
+	return nil
+}
