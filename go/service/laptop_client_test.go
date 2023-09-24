@@ -33,7 +33,7 @@ func TestClientCreateLaptop(t *testing.T) {
 	require.Equal(t, expectedId, res.Id)
 
 	// Check that the laptop is stored on the server (store)
-	fetchedLaptop, err := laptopSever.Store.Find(laptop.Id)
+	fetchedLaptop, err := laptopSever.GetLaptopStore().Find(laptop.Id)
 	require.NoError(t, err)
 	require.NotNil(t, fetchedLaptop)
 	ensureSameLaptop(t, fetchedLaptop, laptop)
@@ -52,7 +52,7 @@ func TestClientSearchLaptop(t *testing.T) {
 	store := service.NewInMemoryLaptopStore()
 	expectedIds := make(map[string]bool)
 
-	for i := 00; i < 6; i++ {
+	for i := 0; i < 6; i++ {
 		laptop := sample.NewLaptop()
 
 		switch i {
@@ -114,8 +114,8 @@ func startTestLaptopClient(t *testing.T, serverAddress string) pb.LaptopServiceC
 	return pb.NewLaptopServiceClient(conn)
 }
 
-func startTestLatopServer(t *testing.T, store *service.InMemoryLaptopStore) (*service.LaptopServer, string) {
-	laptopServer := service.NewLaptopServer(store)
+func startTestLatopServer(t *testing.T, laptopStore *service.InMemoryLaptopStore) (*service.LaptopServer, string) {
+	laptopServer := service.NewLaptopServer(laptopStore, nil)
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterLaptopServiceServer(grpcServer, laptopServer)

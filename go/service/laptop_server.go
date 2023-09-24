@@ -1,8 +1,10 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"log"
 
 	"github.com/eshaanagg/pcbook/go/pb"
@@ -11,18 +13,26 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const maxImageSize = 1 << 20
+
 // LaptopServer is the server that provides the laptop services
 type LaptopServer struct {
 	// Use a in-memory store instead of a database connection
-	Store LaptopStore
+	laptopStore LaptopStore
+	imageStore  ImageStore
 	// Embedded to have forward compatibility
 	pb.UnimplementedLaptopServiceServer
 }
 
+func (server *LaptopServer) GetLaptopStore() LaptopStore {
+	return server.laptopStore
+}
+
 // Returns a new LaptopServer
-func NewLaptopServer(store LaptopStore) *LaptopServer {
+func NewLaptopServer(laptopStore LaptopStore, imageStore ImageStore) *LaptopServer {
 	return &LaptopServer{
-		Store: store,
+		laptopStore: laptopStore,
+		imageStore:  imageStore,
 	}
 }
 
@@ -57,7 +67,7 @@ func (server *LaptopServer) CreateLaptop(ctx context.Context, req *pb.CreateLapt
 		return nil, status.Error(codes.DeadlineExceeded, "Deadline exceeded")
 	}
 
-	err := server.Store.Save(laptop)
+	err := server.laptopStore.Save(laptop)
 	if err != nil {
 		// Figure out the appropiate error code
 		code := codes.Internal
@@ -78,7 +88,7 @@ func (server *LaptopServer) SearchLaptop(req *pb.SearchLaptopRequest, stream pb.
 	filter := req.GetFilter()
 	log.Printf("Recieved a SearchLaptop request with filter: %v", filter)
 
-	err := server.Store.Search(
+	err := server.laptopStore.Search(
 		stream.Context(),
 		filter,
 		func(laptop *pb.Laptop) error {
@@ -100,5 +110,84 @@ func (server *LaptopServer) SearchLaptop(req *pb.SearchLaptopRequest, stream pb.
 		return status.Errorf(codes.Internal, "unexpected error: %v", err)
 	}
 
+	return nil
+}
+
+func (server *LaptopServer) UploadImage(stream pb.LaptopService_UploadImageServer) error {
+	// Handling the first stream packet as a meta-data packet
+	req, err := stream.Recv()
+	if err != nil {
+		log.Printf("Cannot recieve image info: %v", err)
+		return status.Error(codes.Unknown, "cannot recieve image info")
+	}
+
+	laptopId := req.GetInfo().GetLaptopId()
+	imageType := req.GetInfo().GetImageType()
+
+	log.Printf("Recieved an upload image request for laptop %s with image type %s", laptopId, imageType)
+
+	laptop, err := server.laptopStore.Find(laptopId)
+	if err != nil {
+		log.Printf("There was an error in searching for the laptop")
+		return status.Errorf(codes.Internal, "cannot find laptop: %v", err)
+	}
+	if laptop == nil {
+		log.Printf("No laptop with the provided id (%s) was found to be stored.", laptopId)
+		return status.Errorf(codes.InvalidArgument, "No laptop exists with the id : %v", err)
+	}
+
+	imageData := bytes.Buffer{}
+	imageSize := 0
+
+	// Handle all the subsequent packets as image data packets
+	for {
+		log.Print("Waiting for chunk data")
+
+		req, err := stream.Recv()
+		if err == io.EOF {
+			log.Print("Recieved all the image data")
+			break
+		}
+
+		if err != nil {
+			log.Printf("There was an error in recieving the stream data")
+			return status.Errorf(codes.Unknown, "cannot recieve chunck data: %v", err)
+		}
+
+		chunk := req.GetChunkData()
+		size := len(chunk)
+		imageSize += size
+
+		if imageSize > maxImageSize {
+			log.Print("The sent image is too large.")
+			return status.Errorf(codes.InvalidArgument, "The send image is too large. The maximum upload limit is: %v", maxImageSize)
+		}
+
+		_, err = imageData.Write(chunk)
+		if err != nil {
+			log.Print("Cannot append chunk to the image data")
+			return status.Errorf(codes.Internal, "Cannot append the sent chunk to the image data: %v", err)
+		}
+	}
+
+	imageId, err := server.imageStore.Save(laptopId, imageType, imageData)
+	if err != nil {
+		log.Print("There was an error in storing the image to the disk")
+		return status.Errorf(codes.Internal, "Cannot save image to disk: %v", err)
+	}
+
+	res := &pb.UploadImageResponse{
+		Id:   imageId,
+		Size: uint32(imageSize),
+	}
+
+	// Return a response to the client and close the stream
+	err = stream.SendAndClose(res)
+	if err != nil {
+		log.Fatal("Cannot close the stream.")
+		return status.Errorf(codes.Internal, "Cannot close the stream and send response: %v", err)
+	}
+
+	log.Printf("The image is successfully saved with id: %s and size: %v", imageId, imageSize)
 	return nil
 }
