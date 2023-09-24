@@ -8,7 +8,7 @@ server:
 	cd go && go run cmd/server/main.go --port 8080
 
 client: 
-	cd go && go run cmd/client/main.go --address 0.0.0.0:8080
+	cd go/cmd/client && go run . --address 0.0.0.0:8080
 
 test:
 	cd go && go test ./...

@@ -1,9 +1,12 @@
 package service_test
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/eshaanagg/pcbook/go/pb"
@@ -18,7 +21,7 @@ import (
 func TestClientCreateLaptop(t *testing.T) {
 	t.Parallel()
 
-	laptopSever, serverAddress := startTestLatopServer(t, service.NewInMemoryLaptopStore())
+	laptopSever, serverAddress := startTestLatopServer(t, service.NewInMemoryLaptopStore(), nil)
 	laptopClient := startTestLaptopClient(t, serverAddress)
 
 	laptop := sample.NewLaptop()
@@ -84,7 +87,7 @@ func TestClientSearchLaptop(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	_, serverAddress := startTestLatopServer(t, store)
+	_, serverAddress := startTestLatopServer(t, store, nil)
 	laptopClient := startTestLaptopClient(t, serverAddress)
 
 	req := &pb.SearchLaptopRequest{
@@ -108,14 +111,77 @@ func TestClientSearchLaptop(t *testing.T) {
 	require.Equal(t, found, len(expectedIds))
 }
 
+func TestClientUploadImage(t *testing.T) {
+	t.Parallel()
+
+	laptopStore := service.NewInMemoryLaptopStore()
+	imageStore := service.NewDiskImageStore("../serializer/tmp")
+
+	laptop := sample.NewLaptop()
+	err := laptopStore.Save(laptop)
+	require.NoError(t, err)
+
+	_, serverAddress := startTestLatopServer(t, laptopStore, imageStore)
+	laptopClient := startTestLaptopClient(t, serverAddress)
+
+	imagePath := "../images/sampleLaptop.jpg"
+	file, err := os.Open(imagePath)
+	require.NoError(t, err)
+	defer file.Close()
+
+	// Open the stream
+	stream, err := laptopClient.UploadImage(context.Background())
+	require.NoError(t, err)
+
+	size := 0
+
+	// Send the initial packet
+	req := &pb.UploadImageRequest{
+		Data: &pb.UploadImageRequest_Info{
+			Info: &pb.ImageInfo{
+				LaptopId:  laptop.Id,
+				ImageType: filepath.Ext(imagePath),
+			},
+		},
+	}
+	err = stream.Send(req)
+	require.NoError(t, err)
+
+	// Read the file and send all the subsequent packets
+	reader := bufio.NewReader(file)
+	buffer := make([]byte, 1024)
+	for {
+		n, err := reader.Read(buffer)
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		size += n
+
+		req := &pb.UploadImageRequest{
+			Data: &pb.UploadImageRequest_ChunkData{
+				ChunkData: buffer[:n],
+			},
+		}
+		err = stream.Send(req)
+		require.NoError(t, err)
+	}
+
+	// Close the stream finally after the data is set
+	res, err := stream.CloseAndRecv()
+	require.NoError(t, err)
+	require.NotZero(t, res.GetId())
+	require.Equal(t, res.GetSize(), uint32(size))
+}
+
 func startTestLaptopClient(t *testing.T, serverAddress string) pb.LaptopServiceClient {
 	conn, err := grpc.Dial(serverAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	return pb.NewLaptopServiceClient(conn)
 }
 
-func startTestLatopServer(t *testing.T, laptopStore *service.InMemoryLaptopStore) (*service.LaptopServer, string) {
-	laptopServer := service.NewLaptopServer(laptopStore, nil)
+func startTestLatopServer(t *testing.T, laptopStore *service.InMemoryLaptopStore, imageStore *service.DiskImageStore) (*service.LaptopServer, string) {
+	laptopServer := service.NewLaptopServer(laptopStore, imageStore)
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterLaptopServiceServer(grpcServer, laptopServer)
