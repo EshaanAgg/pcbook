@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -133,6 +134,59 @@ func uploadImage(laptopClient pb.LaptopServiceClient, laptopID string, imagePath
 	log.Printf("Image uploaded to the server successfully with id: %s and size: %d", res.GetId(), res.GetSize())
 }
 
+func rateLaptop(laptopClient pb.LaptopServiceClient, laptopsIds []string, scores []float64) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stream, err := laptopClient.RateLaptop(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot open stream to rate laptop: %v", err)
+	}
+
+	waitResponse := make(chan error)
+	// Go routine to recieve responses
+	go func() {
+		for {
+			res, err := stream.Recv()
+			if err == io.EOF {
+				log.Print("No more responses")
+				waitResponse <- nil
+				return
+			}
+
+			if err != nil {
+				waitResponse <- fmt.Errorf("cannot recieve stream response: %v", err)
+				return
+			}
+
+			log.Print("Recieved response: ", res)
+		}
+	}()
+
+	// Send requests
+	for i, laptopId := range laptopsIds {
+		req := &pb.RateLaptopRequest{
+			LaptopId: laptopId,
+			Score:    scores[i],
+		}
+
+		err := stream.Send(req)
+		if err != nil {
+			return fmt.Errorf("cannot send stream request: %v - %v", err, stream.RecvMsg(nil))
+		}
+
+		log.Print("Send request: ", req)
+	}
+
+	err = stream.CloseSend()
+	if err != nil {
+		return fmt.Errorf("cannot close send in Rate Laptop: %v", err)
+	}
+
+	err = <-waitResponse
+	return err
+}
+
 func main() {
 	serverAddress := flag.String("address", "", "The server port")
 	flag.Parse()
@@ -144,5 +198,5 @@ func main() {
 	}
 
 	laptopClient := pb.NewLaptopServiceClient(conn)
-	testUploadImage(laptopClient)
+	testRateLaptop(laptopClient)
 }

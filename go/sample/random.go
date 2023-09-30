@@ -128,3 +128,7 @@ func randomLaptopName(brand string) string {
 		return randomStringFromSet("Thinkpad X1", "Thinkpad P1", "Thinkpad P53")
 	}
 }
+
+func RandomLaptopScore() float64 {
+	return randomFloat64(0, 10)
+}

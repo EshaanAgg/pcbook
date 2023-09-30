@@ -20,6 +20,7 @@ type LaptopServer struct {
 	// Use a in-memory store instead of a database connection
 	laptopStore LaptopStore
 	imageStore  ImageStore
+	ratingStore RatingStore
 	// Embedded to have forward compatibility
 	pb.UnimplementedLaptopServiceServer
 }
@@ -29,10 +30,11 @@ func (server *LaptopServer) GetLaptopStore() LaptopStore {
 }
 
 // Returns a new LaptopServer
-func NewLaptopServer(laptopStore LaptopStore, imageStore ImageStore) *LaptopServer {
+func NewLaptopServer(laptopStore LaptopStore, imageStore ImageStore, ratingStore RatingStore) *LaptopServer {
 	return &LaptopServer{
 		laptopStore: laptopStore,
 		imageStore:  imageStore,
+		ratingStore: ratingStore,
 	}
 }
 
@@ -190,6 +192,55 @@ func (server *LaptopServer) UploadImage(stream pb.LaptopService_UploadImageServe
 	}
 
 	log.Printf("The image is successfully saved with id: %s and size: %v", imageId, imageSize)
+	return nil
+}
+
+func (server *LaptopServer) RateLaptop(stream pb.LaptopService_RateLaptopServer) error {
+	for {
+		err := checkContextError(stream.Context())
+		if err != nil {
+			return err
+		}
+
+		req, err := stream.Recv()
+		if err == io.EOF {
+			log.Print("No more data to recieve.")
+			break
+		}
+
+		if err != nil {
+			log.Fatalf("Cannot recieve stream request: %v", err)
+			return status.Errorf(codes.Unknown, "Cannot recieve stream request: %v", err)
+		}
+
+		laptopId := req.GetLaptopId()
+		score := req.GetScore()
+
+		log.Printf("Recieved a RateLaptop request with id: %v, score = %.2f", laptopId, score)
+
+		found, err := server.laptopStore.Find(laptopId)
+		if err != nil {
+			log.Fatalf("LaptoreStore.Find() function failed: %v", err)
+			return status.Errorf(codes.Internal, "LaptoreStore.Find() function failed: %v", err)
+		}
+
+		if found == nil {
+			return status.Errorf(codes.NotFound, "There is no registered laptop with id: %v", laptopId)
+		}
+
+		rating := server.ratingStore.Add(laptopId, score)
+		res := &pb.RateLaptopResponse{
+			LaptopId:     laptopId,
+			RatedCount:   rating.Count,
+			AverageScore: rating.Sum / float64(rating.Count),
+		}
+		err = stream.Send(res)
+		if err != nil {
+			log.Fatalf("There was an error in sending the response: %v", err)
+			return status.Errorf(codes.Internal, "There was an error in streaming the response to the client: %v", err)
+		}
+	}
+
 	return nil
 }
 
