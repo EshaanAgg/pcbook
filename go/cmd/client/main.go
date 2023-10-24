@@ -187,6 +187,22 @@ func rateLaptop(laptopClient pb.LaptopServiceClient, laptopsIds []string, scores
 	return err
 }
 
+const (
+	username        = "admin1"
+	password        = "secret"
+	refreshDuration = 30 * time.Second
+)
+
+func authMethods() map[string]bool {
+	const laptopServicePath = "/eshaanagg.pcbook.LaptopService/"
+
+	return map[string]bool{
+		laptopServicePath + "CreateLaptop": true,
+		laptopServicePath + "UploadImage":  true,
+		laptopServicePath + "RateLaptop":   true,
+	}
+}
+
 func main() {
 	serverAddress := flag.String("address", "", "The server port")
 	flag.Parse()
@@ -197,6 +213,22 @@ func main() {
 		log.Fatalf("Cannot dial server: %v", err)
 	}
 
-	laptopClient := pb.NewLaptopServiceClient(conn)
+	authClient := NewAuthClient(conn, username, password)
+	interceptor, err := NewAuthInterceptor(authClient, authMethods(), refreshDuration)
+	if err != nil {
+		log.Fatal("Cannot create auth interceptor: ", err)
+	}
+
+	connNew, err := grpc.Dial(
+		*serverAddress,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(interceptor.Unary()),
+		grpc.WithStreamInterceptor(interceptor.Stream()),
+	)
+	if err != nil {
+		log.Fatal("Cannot dial server: ", err)
+	}
+
+	laptopClient := pb.NewLaptopServiceClient(connNew)
 	testRateLaptop(laptopClient)
 }
